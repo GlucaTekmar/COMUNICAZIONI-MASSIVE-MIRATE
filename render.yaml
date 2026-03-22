@@ -16,3 +16,8 @@ services:
     env: python
     buildCommand: ""
     startCommand: streamlit run admin/app_admin.py --server.port 10002 --server.address 0.0.0.0
+
+databases:
+  - name: comunicazioni-db
+    databaseName: comunicazioni
+    user: comunicazioni_user
