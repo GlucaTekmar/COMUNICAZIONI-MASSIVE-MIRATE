@@ -16,12 +16,17 @@ if menu == "Crea Messaggio":
     titolo = st.text_input("Titolo messaggio")
     link_pdf = st.text_input("Link PDF")
 
+    data_inizio = st.date_input("Data inizio")
+    data_fine = st.date_input("Data fine")
+
     if st.button("Salva Messaggio"):
         requests.post(
             f"{API_URL}/messaggi",
             params={
                 "titolo": titolo,
                 "link_pdf": link_pdf
+                "data_inizio": data_inizio,
+                "data_fine": data_fine
             }
         )
         st.success("Messaggio creato")
