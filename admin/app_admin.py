@@ -7,7 +7,27 @@ st.set_page_config(page_title="Admin Dashboard")
 
 st.title("ADMIN - GESTIONE COMUNICAZIONI")
 
-menu = st.sidebar.selectbox("Menu", ["Crea Messaggio", "Log Letture"])
+menu = st.sidebar.selectbox("Menu", ["PDV", "Crea Messaggio", "Log Letture"])
+
+if menu == "PDV":
+    st.header("Gestione Lista PDV")
+
+    lista_pdv = st.text_area("Incolla lista PDV (uno per riga)")
+
+    if st.button("Carica PDV"):
+        requests.post(
+            f"{API_URL}/pdv_bulk",
+            params={"lista_pdv": lista_pdv}
+        )
+        st.success("PDV caricati")
+
+    st.subheader("Lista PDV")
+
+    response = requests.get(f"{API_URL}/pdv")
+
+    if response.status_code == 200:
+        for p in response.json():
+            st.write(f"{p['id']} - {p['nome']}
 
 # --- CREA MESSAGGIO ---
 if menu == "Crea Messaggio":
