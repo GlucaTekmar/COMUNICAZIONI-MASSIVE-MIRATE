@@ -38,11 +38,12 @@ def crea_log(pdv_id: int, nome_dipendente: str, db: Session = Depends(get_db)):
 def get_log(db: Session = Depends(get_db)):
     logs = db.query(Log).all()
 
-    return [
-        {
+    result = []
+    for l in logs:
+        result.append({
             "nome_dipendente": l.nome_dipendente,
             "pdv_id": l.pdv_id,
             "timestamp": str(l.timestamp)
-        }
-        for l in logs
-    ]
+        })
+
+    return result
