@@ -18,3 +18,18 @@ def get_pdv():
         {"id": 2, "nome": "Roma - Centro"},
         {"id": 3, "nome": "Torino - Carrefour"}
     ]
+
+from fastapi import Depends
+from sqlalchemy.orm import Session
+from backend.database import get_db
+from backend.models import Log
+
+@app.post("/log")
+def crea_log(pdv_id: int, nome_dipendente: str, db: Session = Depends(get_db)):
+    nuovo_log = Log(
+        pdv_id=pdv_id,
+        nome_dipendente=nome_dipendente
+    )
+    db.add(nuovo_log)
+    db.commit()
+    return {"status": "log salvato"}
