@@ -36,3 +36,4 @@ class Log(Base):
     pdv_id = Column(Integer)
     messaggi_id = Column(Integer)
     timestamp = Column(TIMESTAMP, server_default=func.now())
+
