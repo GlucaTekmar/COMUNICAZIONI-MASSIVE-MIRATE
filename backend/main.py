@@ -47,3 +47,15 @@ def get_log(db: Session = Depends(get_db)):
         })
 
     return result
+
+from backend.models import Messaggi
+
+@app.post("/messaggi")
+def crea_messaggio(titolo: str, link_pdf: str, db: Session = Depends(get_db)):
+    nuovo = Messaggi(
+        titolo=titolo,
+        link_pdf=link_pdf
+    )
+    db.add(nuovo)
+    db.commit()
+    return {"status": "messaggio creato"}
