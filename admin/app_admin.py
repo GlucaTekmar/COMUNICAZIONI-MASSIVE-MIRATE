@@ -27,7 +27,7 @@ if menu == "PDV":
 
     if response.status_code == 200:
         for p in response.json():
-            st.write(f"{p['id']} - {p['nome']}
+            st.write(f"{p['id']} - {p['nome']}")
 
 # --- CREA MESSAGGIO ---
 if menu == "Crea Messaggio":
