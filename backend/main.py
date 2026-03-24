@@ -79,3 +79,9 @@ def crea_pdv_bulk(lista_pdv: str, db: Session = Depends(get_db)):
 
     db.commit()
     return {"status": "pdv caricati"}
+
+@app.post("/reset_pdv")
+def reset_pdv(db: Session = Depends(get_db)):
+    db.query(PDV).delete()
+    db.commit()
+    return {"status": "pdv cancellati"}
