@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, TIMESTAMP
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, DateTime
 from sqlalchemy.sql import func
 from backend.database import Base
 
@@ -35,5 +35,5 @@ class Log(Base):
     nome_dipendente = Column(String)
     pdv_id = Column(Integer)
     messaggi_id = Column(Integer)
-    timestamp = Column(TIMESTAMP, server_default=func.now())
+    timestamp = Column(DateTime, server_default=func.now())
 
