@@ -69,3 +69,16 @@ def crea_messaggio(
     db.add(nuovo)
     db.commit()
     return {"status": "messaggio creato"}
+
+@app.post("/pdv_bulk")
+def crea_pdv_bulk(lista_pdv: str, db: Session = Depends(get_db)):
+    righe = lista_pdv.split("\n")
+
+    for riga in righe:
+        nome = riga.strip()
+        if nome:
+            nuovo = PDV(nome_pdv=nome)
+            db.add(nuovo)
+
+    db.commit()
+    return {"status": "pdv caricati"}
