@@ -12,13 +12,10 @@ def root():
     return {"status": "API attiva"}
 
 @app.get("/pdv")
-def get_pdv():
-    return [
-        {"id": 1, "nome": "Milano - Coop Via Roma"},
-        {"id": 2, "nome": "Roma - Centro"},
-        {"id": 3, "nome": "Torino - Carrefour"}
-    ]
-
+def get_pdv(db: Session = Depends(get_db)):
+    pdv = db.query(PDV).all()
+    return [{"id": p.pdv_id, "nome": p.nome_pdv} for p in pdv]
+    
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from backend.database import get_db
