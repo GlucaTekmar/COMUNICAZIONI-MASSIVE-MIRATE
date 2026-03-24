@@ -50,11 +50,21 @@ def get_log(db: Session = Depends(get_db)):
 
 from backend.models import Messaggi
 
+from datetime import date
+
 @app.post("/messaggi")
-def crea_messaggio(titolo: str, link_pdf: str, db: Session = Depends(get_db)):
+def crea_messaggio(
+    titolo: str,
+    link_pdf: str,
+    data_inizio: date,
+    data_fine: date,
+    db: Session = Depends(get_db)
+):
     nuovo = Messaggi(
         titolo=titolo,
-        link_pdf=link_pdf
+        link_pdf=link_pdf,
+        data_inizio=data_inizio,
+        data_fine=data_fine
     )
     db.add(nuovo)
     db.commit()
