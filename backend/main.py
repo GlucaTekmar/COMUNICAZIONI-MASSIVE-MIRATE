@@ -33,3 +33,16 @@ def crea_log(pdv_id: int, nome_dipendente: str, db: Session = Depends(get_db)):
     db.add(nuovo_log)
     db.commit()
     return {"status": "log salvato"}
+
+@app.get("/log")
+def get_log(db: Session = Depends(get_db)):
+    logs = db.query(Log).all()
+
+    return [
+        {
+            "nome_dipendente": l.nome_dipendente,
+            "pdv_id": l.pdv_id,
+            "timestamp": l.timestamp
+        }
+        for l in logs
+    ]
