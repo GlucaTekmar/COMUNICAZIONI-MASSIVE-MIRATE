@@ -16,8 +16,8 @@ if menu == "Crea Messaggio":
     titolo = st.text_input("Titolo messaggio")
     link_pdf = st.text_input("Link PDF")
 
-    data_inizio = st.date_input("Data inizio")
-    data_fine = st.date_input("Data fine")
+    data_inizio = st.date_input("Data inizio, format="DD/MM/YYYY")
+    data_fine = st.date_input("Data fine, format="DD/MM/YYYY")
 
     if st.button("Salva Messaggio"):
         requests.post(
