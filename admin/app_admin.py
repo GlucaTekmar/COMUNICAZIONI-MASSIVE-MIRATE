@@ -24,7 +24,7 @@ if menu == "Crea Messaggio":
             f"{API_URL}/messaggi",
             params={
                 "titolo": titolo,
-                "link_pdf": link_pdf
+                "link_pdf": link_pdf,
                 "data_inizio": data_inizio,
                 "data_fine": data_fine
             }
