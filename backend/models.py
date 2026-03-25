@@ -1,39 +1,30 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, DateTime
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from backend.database import Base
+import datetime
+
+class Messaggio(Base):
+    __tablename__ = "messaggi"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titolo = Column(String)
+    contenuto = Column(String)
+    data_invio = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 class PDV(Base):
     __tablename__ = "pdv"
 
-    pdv_id = Column(Integer, primary_key=True)
-    nome_pdv = Column(String, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    nome = Column(String)
+    codice = Column(String)
 
 
-class Messaggi(Base):
-    __tablename__ = "messaggi"
+class LogLettura(Base):
+    __tablename__ = "log_lettura"
 
-    messaggi_id = Column(Integer, primary_key=True)
-    titolo = Column(String)
-    link_pdf = Column(String)
-    data_inizio = Column(Date)
-    data_fine = Column(Date)
-
-
-class MessaggiPDV(Base):
-    __tablename__ = "messaggi_pdv"
-
-    id = Column(Integer, primary_key=True)
-    messaggi_id = Column(Integer, ForeignKey("messaggi.messaggi_id"))
-    pdv_id = Column(Integer, ForeignKey("pdv.pdv_id"))
-
-
-class Log(Base):
-    __tablename__ = "log"
-
-    log_id = Column(Integer, primary_key=True)
-    nome_dipendente = Column(String)
+    id = Column(Integer, primary_key=True, index=True)
+    messaggio_id = Column(Integer)
     pdv_id = Column(Integer)
-    messaggi_id = Column(Integer)
-    timestamp = Column(DateTime, server_default=func.now())
-
+    letto = Column(Boolean, default=False)
+    presenza = Column(Boolean, default=False)
+    nome_operatore = Column(String)
