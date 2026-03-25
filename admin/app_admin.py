@@ -23,7 +23,7 @@ if menu == "PDV":
         else:
             r = requests.post(
                 f"{API_URL}/admin/pdv/bulk",
-                json={"lista_pdv": lista_pdv}
+                params={"lista_pdv": lista_pdv}
             )
 
             if r.status_code == 200:
