@@ -41,7 +41,7 @@ if st.button("Conferma"):
         messaggi = res_msg.json()
 
         if not messaggi:
-            st.info("Nessun messaggio attivo")
+            st.info("su questo PDV oggi NON sono previste PROMO e NON sono presenti comunicazioni specifiche e/o altre indicazioni operative. Buon lavoro")
         else:
             for m in messaggi:
                 st.subheader(m["titolo"])
