@@ -17,7 +17,7 @@ from backend.models import Log, Messaggi, MessaggiPDV, PDV
 
 APP_NAME = "COMUNICAZIONI OPERATIVE API"
 BASE_DIR = Path(__file__).resolve().parent.parent
-STORAGE_ROOT = Path("./storage")
+STORAGE_ROOT = Path(os.getenv("STORAGE_ROOT", "/var/data/storage"))
 PDF_STORAGE_DIR = STORAGE_ROOT / "circolari"
 BACKUP_DIR = STORAGE_ROOT / "backup"
 
