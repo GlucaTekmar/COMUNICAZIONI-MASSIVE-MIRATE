@@ -2,7 +2,10 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+pandas
+python-multipart
+jinja2
+aiofiles
 streamlit
 requests
-pandas
-openpyxl
+python-dotenv
