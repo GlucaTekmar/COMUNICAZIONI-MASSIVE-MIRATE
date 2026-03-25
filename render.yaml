@@ -1,23 +1,26 @@
 services:
   - type: web
-    name: backend-api
-    env: python
-    buildCommand: pip install -r requirements.txt
+    name: comunicazioni-backend
+    runtime: python
+    plan: free
+    buildCommand: ""
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: comunicazioni-db
+          property: connectionString
 
   - type: web
-    name: frontend-dipendenti
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run frontend/app_dipendenti.py --server.port $PORT --server.address 0.0.0.0
-
-  - type: web
-    name: admin-dashboard
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run admin/app_admin.py --server.port $PORT --server.address 0.0.0.0
+    name: comunicazioni-frontend
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: streamlit run frontend/app.py --server.port 10001 --server.address 0.0.0.0
+    envVars:
+      - key: BACKEND_URL
+        value: https://comunicazioni-backend.onrender.com
 
 databases:
   - name: comunicazioni-db
-    databaseName: comunicazioni
-    user: comunicazioni_user
+    plan: free
