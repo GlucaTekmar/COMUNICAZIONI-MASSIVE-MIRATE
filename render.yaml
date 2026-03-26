@@ -3,7 +3,7 @@ services:
     name: comunicazioni-backend
     runtime: python
     plan: free
-    buildCommand: ""
+    buildCommand: "pip install -r requirements.txt"
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: DATABASE_URL
@@ -15,7 +15,7 @@ services:
     name: comunicazioni-frontend
     runtime: python
     plan: free
-    buildCommand: ""
+    buildCommand: "pip install -r requirements.txt"
     startCommand: streamlit run frontend/app.py --server.port 10001 --server.address 0.0.0.0
     envVars:
       - key: BACKEND_URL
