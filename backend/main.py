@@ -1,13 +1,9 @@
-import io
-import os
-from datetime import date, datetime
-from pathlib import Path
+from datetime import date
 from typing import List
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from sqlalchemy import and_, delete, func, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -16,13 +12,6 @@ from backend.database import Base, engine, get_db
 from backend.models import Log, Messaggi, MessaggiPDV, PDV
 
 APP_NAME = "COMUNICAZIONI OPERATIVE API"
-BASE_DIR = Path(__file__).resolve().parent.parent
-STORAGE_ROOT = Path(os.getenv("STORAGE_ROOT", "/var/data/storage"))
-PDF_STORAGE_DIR = STORAGE_ROOT / "circolari"
-BACKUP_DIR = STORAGE_ROOT / "backup"
-
-PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
 
@@ -35,9 +24,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-if PDF_STORAGE_DIR.exists():
-    app.mount("/storage", StaticFiles(directory=str(STORAGE_ROOT)), name="storage")
 
 DB_ERROR_MESSAGE = (
     "Sistema temporaneamente non disponibile.\n"
@@ -92,9 +78,11 @@ def replace_pdv_list(lista_pdv: str, db: Session = Depends(get_db)) -> dict:
                     "ID,Nome PDV"
                 ),
             )
+
         left, right = raw.split(",", 1)
         left = left.strip()
         right = right.strip()
+
         if not left.isdigit() or not right:
             raise HTTPException(
                 status_code=400,
@@ -111,7 +99,9 @@ def replace_pdv_list(lista_pdv: str, db: Session = Depends(get_db)) -> dict:
     try:
         existing = {
             row.pdv_id: row
-            for row in db.execute(select(PDV).where(PDV.pdv_id.in_(list(seen_ids)))).scalars().all()
+            for row in db.execute(
+                select(PDV).where(PDV.pdv_id.in_(list(seen_ids)))
+            ).scalars().all()
         }
 
         for row in parsed_rows:
@@ -131,7 +121,13 @@ def replace_pdv_list(lista_pdv: str, db: Session = Depends(get_db)) -> dict:
 
 @app.get("/admin/messaggi")
 def list_messaggi_admin(db: Session = Depends(get_db)) -> List[dict]:
-    rows = db.execute(select(Messaggi).order_by(Messaggi.data_inizio.desc(), Messaggi.messaggi_id.desc())).scalars().all()
+    rows = db.execute(
+        select(Messaggi).order_by(
+            Messaggi.data_inizio.desc(),
+            Messaggi.messaggi_id.desc(),
+        )
+    ).scalars().all()
+
     return [
         {
             "messaggi_id": row.messaggi_id,
@@ -155,6 +151,7 @@ def create_messaggio(
 ) -> dict:
     titolo = titolo.strip()
     link_pdf = link_pdf.strip()
+
     if not titolo:
         raise HTTPException(status_code=400, detail="Titolo obbligatorio")
     if not link_pdf:
@@ -240,16 +237,24 @@ def list_messaggi_for_pdv(pdv_id: int, db: Session = Depends(get_db)) -> List[di
                 "timestamp_conferma": timestamp.isoformat() if timestamp else None,
             }
         )
+
     return output
 
 
 @app.post("/log")
-def create_log(nome_dipendente: str, pdv_id: int, messaggi_id: int, db: Session = Depends(get_db)) -> dict:
+def create_log(
+    nome_dipendente: str,
+    pdv_id: int,
+    messaggi_id: int,
+    db: Session = Depends(get_db),
+) -> dict:
     nome_dipendente = nome_dipendente.strip()
     if not nome_dipendente:
         raise HTTPException(status_code=400, detail="Nome dipendente obbligatorio")
 
-    pdv_exists = db.execute(select(PDV.pdv_id).where(PDV.pdv_id == pdv_id)).scalar_one_or_none()
+    pdv_exists = db.execute(
+        select(PDV.pdv_id).where(PDV.pdv_id == pdv_id)
+    ).scalar_one_or_none()
     if pdv_exists is None:
         raise HTTPException(status_code=404, detail="PDV non trovato")
 
@@ -296,6 +301,7 @@ def list_log_admin(db: Session = Depends(get_db)) -> List[dict]:
     )
 
     rows = db.execute(query).all()
+
     return [
         {
             "log_id": row.log_id,
@@ -308,20 +314,3 @@ def list_log_admin(db: Session = Depends(get_db)) -> List[dict]:
         }
         for row in rows
     ]
-
-
-@app.get("/admin/backup/latest")
-def download_latest_backup() -> Response:
-    if not BACKUP_DIR.exists():
-        raise HTTPException(status_code=404, detail="Cartella backup non trovata")
-
-    backup_files = sorted(BACKUP_DIR.glob("*.sql"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not backup_files:
-        raise HTTPException(status_code=404, detail="Nessun backup disponibile")
-
-    latest = backup_files[0]
-    return FileResponse(
-        path=latest,
-        filename=latest.name,
-        media_type="application/sql",
-    )
