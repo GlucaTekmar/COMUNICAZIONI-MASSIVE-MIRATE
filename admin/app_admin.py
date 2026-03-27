@@ -1,111 +1,151 @@
 import streamlit as st
 import requests
+import pandas as pd
+from datetime import date
 
-API_URL = "https://backend-api-3jd8.onrender.com"
+# ==========================================
+# CONFIG
+# ==========================================
 
-st.set_page_config(page_title="Admin Dashboard", layout="wide")
+BACKEND_URL = "https://backend-api-3jd8.onrender.com"
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "admin123")
 
-st.title("ADMIN - GESTIONE COMUNICAZIONI")
+st.set_page_config(layout="wide")
 
-menu = st.sidebar.selectbox("Menu", ["PDV", "Crea Messaggio", "Log Letture"])
+# ==========================================
+# LOGIN
+# ==========================================
 
-# =========================
-# PDV
-# =========================
-if menu == "PDV":
-    st.header("Gestione Lista PDV")
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
-    lista_pdv = st.text_area("Incolla lista PDV (formato: ID,Nome)")
+if not st.session_state.logged_in:
+    st.title("LOGIN ADMIN")
 
-    if st.button("Carica PDV"):
-        if not lista_pdv.strip():
-            st.warning("Inserisci almeno un PDV")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Accedi"):
+        if password == ADMIN_PASSWORD:
+            st.session_state.logged_in = True
+            st.rerun()
         else:
-            r = requests.post(
-                f"{API_URL}/admin/pdv/bulk",
-                params={"lista_pdv": lista_pdv}
-            )
+            st.error("Password errata")
 
-            if r.status_code == 200:
-                st.success("PDV salvati correttamente")
-            else:
-                st.error(f"Errore: {r.text}")
+    st.stop()
 
-    st.subheader("Lista PDV")
+# ==========================================
+# HEADER
+# ==========================================
 
-    res = requests.get(f"{API_URL}/pdv")
+st.title("AREA ADMIN")
 
-    if res.status_code == 200:
-        pdv = res.json()
+col1, col2 = st.columns([8, 1])
+with col2:
+    if st.button("LOGOUT"):
+        st.session_state.logged_in = False
+        st.rerun()
 
-        if not pdv:
-            st.info("Nessun PDV presente")
-        else:
-            for p in pdv:
-                st.write(f"{p['pdv_id']} - {p['nome_pdv']}")
-    else:
-        st.error("Errore recupero PDV")
+st.markdown(f"Data: {date.today()}")
 
+# ==========================================
+# MENU
+# ==========================================
 
-# =========================
-# CREA MESSAGGIO
-# =========================
-elif menu == "Crea Messaggio":
-    st.header("Nuovo Messaggio")
+page = st.sidebar.selectbox(
+    "Seleziona pagina",
+    ["NUOVO MESSAGGIO", "TABELLA MESSAGGI", "TABELLA LOG"]
+)
 
-    titolo = st.text_input("Titolo messaggio")
+# ==========================================
+# NUOVO MESSAGGIO
+# ==========================================
+
+if page == "NUOVO MESSAGGIO":
+
+    st.header("Nuova Circolare")
+
+    titolo = st.text_input("Titolo")
     link_pdf = st.text_input("Link PDF")
+
+    st.markdown("PDV destinatari (uno per riga)")
+    pdv_text = st.text_area("")
+
     data_inizio = st.date_input("Data inizio")
     data_fine = st.date_input("Data fine")
 
-    res = requests.get(f"{API_URL}/pdv")
+    if st.button("CREA CIRCOLARE"):
+        try:
+            pdv_ids = [int(x.strip()) for x in pdv_text.split("\n") if x.strip()]
 
-    pdv_ids = []
-    if res.status_code == 200:
-        pdv = res.json()
-        opzioni = {f"{p['pdv_id']} - {p['nome_pdv']}": p["pdv_id"] for p in pdv}
-        selezionati = st.multiselect("Seleziona PDV", list(opzioni.keys()))
-        pdv_ids = [opzioni[s] for s in selezionati]
-
-    if st.button("Salva Messaggio"):
-        if not titolo or not link_pdf or not pdv_ids:
-            st.warning("Compila tutti i campi")
-        else:
-            r = requests.post(
-                f"{API_URL}/admin/messaggi",
+            res = requests.post(
+                f"{BACKEND_URL}/admin/circolare",
                 params={
                     "titolo": titolo,
                     "link_pdf": link_pdf,
+                    "pdv_ids": pdv_ids,
                     "data_inizio": data_inizio,
-                    "data_fine": data_fine,
-                    "pdv_ids": ",".join(map(str, pdv_ids))
+                    "data_fine": data_fine
                 }
             )
 
-            if r.status_code == 200:
-                st.success("Messaggio creato")
+            if res.status_code == 200:
+                st.success("Circolare creata")
             else:
-                st.error(f"Errore: {r.text}")
+                st.error("Errore")
 
+        except:
+            st.error("Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
 
-# =========================
-# LOG LETTURE
-# =========================
-elif menu == "Log Letture":
-    st.header("Log Letture")
+# ==========================================
+# TABELLA MESSAGGI
+# ==========================================
 
-    res = requests.get(f"{API_URL}/admin/log")
+elif page == "TABELLA MESSAGGI":
 
-    if res.status_code == 200:
-        logs = res.json()
+    st.header("Circolari")
 
-        if not logs:
-            st.info("Nessun log presente")
-        else:
-            for l in logs:
-                st.write(
-                    f"{l['timestamp']} | {l['nome_dipendente']} | "
-                    f"{l['nome_pdv']} | {l['titolo']}"
-                )
-    else:
-        st.error("Errore nel recupero dati")
+    if st.button("AGGIORNA"):
+        st.rerun()
+
+    try:
+        res = requests.get(f"{BACKEND_URL}/admin/circolari")
+        data = res.json()
+
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
+
+        st.download_button(
+            "Download Excel",
+            df.to_csv(index=False),
+            file_name="circolari.csv"
+        )
+
+    except:
+        st.error("Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
+
+# ==========================================
+# TABELLA LOG
+# ==========================================
+
+elif page == "TABELLA LOG":
+
+    st.header("Log Lettura")
+
+    if st.button("AGGIORNA"):
+        st.rerun()
+
+    try:
+        res = requests.get(f"{BACKEND_URL}/admin/log")
+        data = res.json()
+
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)
+
+        st.download_button(
+            "Download Excel",
+            df.to_csv(index=False),
+            file_name="log.csv"
+        )
+
+    except:
+        st.error("Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
