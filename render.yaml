@@ -1,31 +1,24 @@
 services:
-
-  # =========================
-  # BACKEND API
-  # =========================
   - type: web
     name: backend-api
     env: python
-    buildCommand: ""
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
     startCommand: uvicorn backend.main:app --host 0.0.0.0 --port 10000
     plan: starter
 
-  # =========================
-  # FRONTEND DIPENDENTI
-  # =========================
   - type: web
     name: frontend-dipendenti
     env: python
-    buildCommand: ""
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
     startCommand: streamlit run frontend/app_dipendenti.py --server.port 10000 --server.address 0.0.0.0
     plan: starter
 
-  # =========================
-  # ADMIN DASHBOARD
-  # =========================
   - type: web
     name: admin-dashboard
     env: python
-    buildCommand: ""
+    rootDir: .
+    buildCommand: pip install -r requirements.txt
     startCommand: streamlit run admin/app_admin.py --server.port 10000 --server.address 0.0.0.0
     plan: starter
