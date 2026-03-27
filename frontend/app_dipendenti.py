@@ -1,63 +1,130 @@
 import streamlit as st
 import requests
+from datetime import date
+
+# ==========================================
+# CONFIG
+# ==========================================
 
 BACKEND_URL = "https://backend-api-3jd8.onrender.com"
+HOME_URL = "https://eu.jotform.com/app/253605296903360"
 
-st.title("SELEZIONA PUNTO VENDITA")
+st.set_page_config(layout="wide")
 
-nome = st.text_input("Inserisci nome e cognome")
+# ==========================================
+# STYLE
+# ==========================================
 
-# carica PDV
-response = requests.get(f"{BACKEND_URL}/pdv")
+st.markdown("""
+<style>
+body {
+    background-color: red;
+}
+.stButton>button {
+    background-color: black;
+    color: red;
+}
+</style>
+""", unsafe_allow_html=True)
 
-if response.status_code != 200:
-    st.error("Errore nel recupero PDV")
-    st.stop()
+# ==========================================
+# HEADER
+# ==========================================
 
-pdv_list = response.json()
+st.title("COMUNICAZIONI OPERATIVE")
+st.markdown(f"Data: {date.today()}")
 
-if not pdv_list:
-    st.warning("Nessun PDV disponibile")
-    st.stop()
+st.markdown(f"[TORNA ALLA HOME]({HOME_URL})")
 
-pdv_dict = {f"{p['pdv_id']} - {p['nome_pdv']}": p["pdv_id"] for p in pdv_list}
+# ==========================================
+# SESSION STATE
+# ==========================================
 
-scelta = st.selectbox("Seleziona PDV", list(pdv_dict.keys()))
-pdv_id = pdv_dict[scelta]
+if "pdv_id" not in st.session_state:
+    st.session_state.pdv_id = None
 
-if st.button("Conferma"):
-    if not nome:
-        st.warning("Inserisci il nome")
-    else:
-        st.success(f"PDV selezionato: {scelta}")
+if "pdv_nome" not in st.session_state:
+    st.session_state.pdv_nome = None
 
-        # carica messaggi per PDV
-        res_msg = requests.get(f"{BACKEND_URL}/messaggi/{pdv_id}")
+if "confermato" not in st.session_state:
+    st.session_state.confermato = False
 
-        if res_msg.status_code != 200:
-            st.error("Errore nel recupero messaggi")
-            st.stop()
+# ==========================================
+# SELEZIONE PDV
+# ==========================================
 
-        messaggi = res_msg.json()
+if not st.session_state.pdv_id:
 
-        if not messaggi:
-            st.info("su questo PDV oggi NON sono previste Promo nè Comunicazioni Operative. Buon lavoro")
+    st.header("SELEZIONA PDV")
+
+    try:
+        res = requests.get(f"{BACKEND_URL}/pdv")
+        pdv_list = res.json()
+
+        pdv_dict = {f"{p['nome_pdv']} ({p['pdv_id']})": p['pdv_id'] for p in pdv_list}
+
+        scelta = st.selectbox("digita le prime lettere della città", list(pdv_dict.keys()))
+
+        if st.button("CONFERMA"):
+            st.session_state.pdv_id = pdv_dict[scelta]
+            st.session_state.pdv_nome = scelta
+            st.rerun()
+
+    except:
+        st.error("Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
+
+# ==========================================
+# CONFERMA PDV
+# ==========================================
+
+elif not st.session_state.confermato:
+
+    st.markdown("### TI TROVI AL PUNTO VENDITA")
+    st.markdown(f"## {st.session_state.pdv_nome}")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("CONFERMA"):
+            st.session_state.confermato = True
+            st.rerun()
+
+    with col2:
+        if st.button("CAMBIA PDV"):
+            st.session_state.pdv_id = None
+            st.session_state.pdv_nome = None
+            st.rerun()
+
+# ==========================================
+# VISUALIZZAZIONE CIRCOLARE
+# ==========================================
+
+else:
+
+    try:
+        res = requests.get(f"{BACKEND_URL}/circolare/{st.session_state.pdv_id}")
+        data = res.json()
+
+        if "message" in data:
+            st.info(data["message"])
         else:
-            for m in messaggi:
-                st.subheader(m["titolo"])
-                st.write(f"Dal {m['data_inizio']} al {m['data_fine']}")
+            st.header(data["titolo"])
+            st.markdown(f"[APRI PDF]({data['link_pdf']})")
 
-                if st.button(f"Conferma lettura {m['messaggi_id']}"):
-                    r = requests.post(
-                        f"{BACKEND_URL}/log",
-                        params={
-                            "nome_dipendente": nome,
-                            "pdv_id": pdv_id,
-                            "messaggi_id": m["messaggi_id"],
-                        },
-                    )
+            nome = st.text_input("Nome e Cognome")
 
-                    if r.status_code == 200:
-                        st.success("Conferma registrata")
-                    else:
-                        st.error("Errore invio log")
+            conferma = st.checkbox("Confermo di aver letto la comunicazione")
+
+            if conferma and st.button("INVIA"):
+                requests.post(
+                    f"{BACKEND_URL}/log",
+                    params={
+                        "nome_dipendente": nome,
+                        "pdv_id": st.session_state.pdv_id,
+                        "circolare_id": data["circolare_id"]
+                    }
+                )
+                st.success("Registrazione effettuata")
+
+    except:
+        st.error("Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
