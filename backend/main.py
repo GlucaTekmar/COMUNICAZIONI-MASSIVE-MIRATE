@@ -1,316 +1,218 @@
-from datetime import date
-from typing import List
-
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from sqlalchemy import and_, delete, func, select, text
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
+from datetime import date, datetime
+from typing import List
+import os
+import shutil
 
-from backend.database import Base, engine, get_db
-from backend.models import Log, Messaggi, MessaggiPDV, PDV
+from backend.database import Base, engine, get_db, check_db_connection
+from backend import models
 
-APP_NAME = "COMUNICAZIONI OPERATIVE API"
+# ==========================================
+# APP INIT
+# ==========================================
 
+app = FastAPI()
+
+# Creazione tabelle (DB vuoto → OK)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title=APP_NAME)
+# ==========================================
+# COSTANTI
+# ==========================================
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+STORAGE_PATH = "/var/data"
 
-DB_ERROR_MESSAGE = (
-    "Sistema temporaneamente non disponibile.\n"
-    "Riprova tra qualche minuto.\n\n"
-    "Per ADMIN - necessario il ripristino del Database"
-)
+# ==========================================
+# HEALTH CHECK
+# ==========================================
 
+@app.get("/health")
+def health():
+    if not check_db_connection():
+        return {"status": "error", "message": "Sistema temporaneamente non disponibile. Riprovare tra qualche minuto."}
+    return {"status": "ok"}
 
-@app.exception_handler(SQLAlchemyError)
-def sqlalchemy_exception_handler(_, __):
-    return JSONResponse(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        content={"detail": DB_ERROR_MESSAGE},
-    )
-
-
-@app.get("/")
-def root() -> dict:
-    return {"status": "API attiva"}
-
-
-@app.get("/health/db")
-def health_db(db: Session = Depends(get_db)) -> dict:
-    try:
-        db.execute(text("SELECT 1"))
-        return {"status": "ok"}
-    except SQLAlchemyError as exc:
-        raise HTTPException(status_code=503, detail=DB_ERROR_MESSAGE) from exc
-
+# ==========================================
+# PDV LIST
+# ==========================================
 
 @app.get("/pdv")
-def list_pdv(db: Session = Depends(get_db)) -> List[dict]:
-    rows = db.execute(select(PDV).order_by(PDV.nome_pdv.asc())).scalars().all()
-    return [{"pdv_id": row.pdv_id, "nome_pdv": row.nome_pdv} for row in rows]
-
-
-@app.post("/admin/pdv/bulk")
-def replace_pdv_list(lista_pdv: str, db: Session = Depends(get_db)) -> dict:
-    lines = [line.strip() for line in lista_pdv.splitlines() if line.strip()]
-    if not lines:
-        raise HTTPException(status_code=400, detail="La lista PDV è vuota")
-
-    parsed_rows = []
-    seen_ids = set()
-
-    for raw in lines:
-        if "," not in raw:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Formato lista PDV non valido. Ogni riga deve essere nel formato: "
-                    "ID,Nome PDV"
-                ),
-            )
-
-        left, right = raw.split(",", 1)
-        left = left.strip()
-        right = right.strip()
-
-        if not left.isdigit() or not right:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Riga non valida: {raw}",
-            )
-
-        pdv_id = int(left)
-        if pdv_id in seen_ids:
-            raise HTTPException(status_code=400, detail=f"ID PDV duplicato: {pdv_id}")
-
-        seen_ids.add(pdv_id)
-        parsed_rows.append({"pdv_id": pdv_id, "nome_pdv": right})
-
+def get_pdv(db: Session = Depends(get_db)):
     try:
-        existing = {
-            row.pdv_id: row
-            for row in db.execute(
-                select(PDV).where(PDV.pdv_id.in_(list(seen_ids)))
-            ).scalars().all()
-        }
+        return db.query(models.PDV).all()
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
 
-        for row in parsed_rows:
-            if row["pdv_id"] in existing:
-                existing[row["pdv_id"]].nome_pdv = row["nome_pdv"]
-            else:
-                db.add(PDV(pdv_id=row["pdv_id"], nome_pdv=row["nome_pdv"]))
+# ==========================================
+# CIRCOLARE ATTIVA PER PDV
+# ==========================================
 
-        db.execute(delete(PDV).where(PDV.pdv_id.not_in(list(seen_ids))))
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail=DB_ERROR_MESSAGE) from exc
+@app.get("/circolare/{pdv_id}")
+def get_circolare(pdv_id: int, db: Session = Depends(get_db)):
+    try:
+        today = date.today()
 
-    return {"status": "ok", "count": len(parsed_rows)}
-
-
-@app.get("/admin/messaggi")
-def list_messaggi_admin(db: Session = Depends(get_db)) -> List[dict]:
-    rows = db.execute(
-        select(Messaggi).order_by(
-            Messaggi.data_inizio.desc(),
-            Messaggi.messaggi_id.desc(),
+        circolare = (
+            db.query(models.Circolare)
+            .join(models.CircolarePDV)
+            .filter(
+                models.CircolarePDV.pdv_id == pdv_id,
+                models.Circolare.data_inizio <= today,
+                models.Circolare.data_fine >= today
+            )
+            .first()
         )
-    ).scalars().all()
 
-    return [
-        {
-            "messaggi_id": row.messaggi_id,
-            "titolo": row.titolo,
-            "link_pdf": row.link_pdf,
-            "data_inizio": row.data_inizio.isoformat(),
-            "data_fine": row.data_fine.isoformat(),
+        if not circolare:
+            return {"message": "su questo PDV oggi non ci sono Promo né Comunicazioni Operative. Buon lavoro"}
+
+        return {
+            "circolare_id": circolare.circolare_id,
+            "titolo": circolare.titolo,
+            "link_pdf": circolare.link_pdf
         }
-        for row in rows
-    ]
 
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
 
-@app.post("/admin/messaggi")
-def create_messaggio(
+# ==========================================
+# REGISTRA LOG
+# ==========================================
+
+@app.post("/log")
+def registra_log(nome_dipendente: str, pdv_id: int, circolare_id: int, db: Session = Depends(get_db)):
+    try:
+        today = date.today()
+
+        existing = db.query(models.Log).filter(
+            models.Log.pdv_id == pdv_id,
+            models.Log.circolare_id == circolare_id
+        ).all()
+
+        for log in existing:
+            if log.timestamp.date() == today:
+                return {"message": "già registrato oggi"}
+
+        new_log = models.Log(
+            nome_dipendente=nome_dipendente,
+            pdv_id=pdv_id,
+            circolare_id=circolare_id,
+            timestamp=datetime.utcnow()
+        )
+
+        db.add(new_log)
+        db.commit()
+
+        return {"message": "ok"}
+
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
+
+# ==========================================
+# ADMIN — CREA CIRCOLARE
+# ==========================================
+
+@app.post("/admin/circolare")
+def crea_circolare(
     titolo: str,
     link_pdf: str,
+    pdv_ids: List[int],
     data_inizio: date,
     data_fine: date,
-    pdv_ids: str,
-    db: Session = Depends(get_db),
-) -> dict:
-    titolo = titolo.strip()
-    link_pdf = link_pdf.strip()
-
-    if not titolo:
-        raise HTTPException(status_code=400, detail="Titolo obbligatorio")
-    if not link_pdf:
-        raise HTTPException(status_code=400, detail="Link PDF obbligatorio")
-    if data_fine < data_inizio:
-        raise HTTPException(status_code=400, detail="Data fine precedente alla data inizio")
-
+    db: Session = Depends(get_db)
+):
     try:
-        parsed_ids = sorted({int(item.strip()) for item in pdv_ids.split(",") if item.strip()})
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Lista PDV non valida") from exc
-
-    if not parsed_ids:
-        raise HTTPException(status_code=400, detail="Selezionare almeno un PDV")
-
-    existing_ids = set(
-        db.execute(select(PDV.pdv_id).where(PDV.pdv_id.in_(parsed_ids))).scalars().all()
-    )
-    missing = [pid for pid in parsed_ids if pid not in existing_ids]
-    if missing:
-        raise HTTPException(status_code=400, detail=f"PDV inesistenti: {missing}")
-
-    try:
-        message = Messaggi(
+        circolare = models.Circolare(
             titolo=titolo,
             link_pdf=link_pdf,
             data_inizio=data_inizio,
-            data_fine=data_fine,
+            data_fine=data_fine
         )
-        db.add(message)
-        db.flush()
 
-        for pdv_id in parsed_ids:
-            db.add(MessaggiPDV(messaggi_id=message.messaggi_id, pdv_id=pdv_id))
+        db.add(circolare)
+        db.commit()
+        db.refresh(circolare)
+
+        for pdv_id in pdv_ids:
+            relazione = models.CircolarePDV(
+                circolare_id=circolare.circolare_id,
+                pdv_id=pdv_id
+            )
+            db.add(relazione)
 
         db.commit()
-        db.refresh(message)
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Errore di integrità sui dati inviati") from exc
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail=DB_ERROR_MESSAGE) from exc
 
-    return {"status": "ok", "messaggi_id": message.messaggi_id}
+        return {"message": "circolare creata"}
 
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
 
-@app.get("/messaggi/{pdv_id}")
-def list_messaggi_for_pdv(pdv_id: int, db: Session = Depends(get_db)) -> List[dict]:
-    today = date.today()
+# ==========================================
+# ADMIN — LISTA CIRCOLARI
+# ==========================================
 
-    query = (
-        select(Messaggi, Log.log_id, Log.timestamp)
-        .join(MessaggiPDV, MessaggiPDV.messaggi_id == Messaggi.messaggi_id)
-        .outerjoin(
-            Log,
-            and_(
-                Log.messaggi_id == Messaggi.messaggi_id,
-                Log.pdv_id == pdv_id,
-                func.date(Log.timestamp) == today,
-            ),
-        )
-        .where(
-            MessaggiPDV.pdv_id == pdv_id,
-            Messaggi.data_inizio <= today,
-            Messaggi.data_fine >= today,
-        )
-        .order_by(Messaggi.data_inizio.desc(), Messaggi.messaggi_id.desc())
-    )
-
-    rows = db.execute(query).all()
-
-    output = []
-    for msg, log_id, timestamp in rows:
-        output.append(
-            {
-                "messaggi_id": msg.messaggi_id,
-                "titolo": msg.titolo,
-                "link_pdf": msg.link_pdf,
-                "data_inizio": msg.data_inizio.isoformat(),
-                "data_fine": msg.data_fine.isoformat(),
-                "gia_confermato_oggi": log_id is not None,
-                "timestamp_conferma": timestamp.isoformat() if timestamp else None,
-            }
-        )
-
-    return output
-
-
-@app.post("/log")
-def create_log(
-    nome_dipendente: str,
-    pdv_id: int,
-    messaggi_id: int,
-    db: Session = Depends(get_db),
-) -> dict:
-    nome_dipendente = nome_dipendente.strip()
-    if not nome_dipendente:
-        raise HTTPException(status_code=400, detail="Nome dipendente obbligatorio")
-
-    pdv_exists = db.execute(
-        select(PDV.pdv_id).where(PDV.pdv_id == pdv_id)
-    ).scalar_one_or_none()
-    if pdv_exists is None:
-        raise HTTPException(status_code=404, detail="PDV non trovato")
-
-    message_exists = db.execute(
-        select(Messaggi.messaggi_id).where(Messaggi.messaggi_id == messaggi_id)
-    ).scalar_one_or_none()
-    if message_exists is None:
-        raise HTTPException(status_code=404, detail="Messaggio non trovato")
-
+@app.get("/admin/circolari")
+def lista_circolari(db: Session = Depends(get_db)):
     try:
-        log_row = Log(
-            nome_dipendente=nome_dipendente,
-            pdv_id=pdv_id,
-            messaggi_id=messaggi_id,
-        )
-        db.add(log_row)
-        db.commit()
-        db.refresh(log_row)
-    except IntegrityError:
-        db.rollback()
-        return {"status": "ok", "detail": "Conferma già registrata oggi"}
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(status_code=503, detail=DB_ERROR_MESSAGE) from exc
+        circolari = db.query(models.Circolare).all()
 
-    return {"status": "ok", "log_id": log_row.log_id}
+        return [
+            {
+                "id": c.circolare_id,
+                "titolo": c.titolo,
+                "link_pdf": c.link_pdf,
+                "data_inizio": c.data_inizio,
+                "data_fine": c.data_fine,
+                "stato": c.stato
+            }
+            for c in circolari
+        ]
 
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
+
+# ==========================================
+# ADMIN — LOG
+# ==========================================
 
 @app.get("/admin/log")
-def list_log_admin(db: Session = Depends(get_db)) -> List[dict]:
-    query = (
-        select(
-            Log.log_id,
-            Log.nome_dipendente,
-            Log.timestamp,
-            PDV.pdv_id,
-            PDV.nome_pdv,
-            Messaggi.messaggi_id,
-            Messaggi.titolo,
-        )
-        .join(PDV, PDV.pdv_id == Log.pdv_id)
-        .join(Messaggi, Messaggi.messaggi_id == Log.messaggi_id)
-        .order_by(Log.timestamp.desc(), Log.log_id.desc())
-    )
+def lista_log(db: Session = Depends(get_db)):
+    try:
+        logs = db.query(models.Log).all()
 
-    rows = db.execute(query).all()
+        return [
+            {
+                "nome": l.nome_dipendente,
+                "pdv": l.pdv_id,
+                "circolare": l.circolare_id,
+                "timestamp": l.timestamp
+            }
+            for l in logs
+        ]
 
-    return [
-        {
-            "log_id": row.log_id,
-            "nome_dipendente": row.nome_dipendente,
-            "timestamp": row.timestamp.isoformat() if row.timestamp else None,
-            "pdv_id": row.pdv_id,
-            "nome_pdv": row.nome_pdv,
-            "messaggi_id": row.messaggi_id,
-            "titolo": row.titolo,
-        }
-        for row in rows
-    ]
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
+
+# ==========================================
+# ADMIN — PULIZIA STORAGE
+# ==========================================
+
+@app.post("/admin/clean-storage")
+def clean_storage(db: Session = Depends(get_db)):
+    try:
+        files = os.listdir(STORAGE_PATH)
+        db_links = [c.link_pdf for c in db.query(models.Circolare).all()]
+
+        removed = []
+
+        for f in files:
+            full_path = os.path.join(STORAGE_PATH, f)
+            if full_path not in db_links:
+                os.remove(full_path)
+                removed.append(f)
+
+        return {"removed": removed}
+
+    except:
+        raise HTTPException(status_code=500, detail="Sistema temporaneamente non disponibile. Riprovare tra qualche minuto.")
